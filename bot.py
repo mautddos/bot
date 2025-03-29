@@ -1,73 +1,29 @@
-import telebot
+from pyrogram import Client
 
-# Replace with your actual bot token
-BOT_TOKEN = '7685124406:AAHSlQuDOnmhiX5_jU4z1KZA5a3lbIe96aE'
+# Fill in your API credentials
+API_ID = 22625636  # Your API ID
+API_HASH = "f71778a6e1e102f33ccc4aee3b5cc697"  # Your API Hash
+BOT_TOKEN = "7685124406:AAHSlQuDOnmhiX5_jU4z1KZA5a3lbIe96aE"  # Your bot token
 
-bot = telebot.TeleBot(BOT_TOKEN)
-user_data = {}  # Store user-specific data
+# Initialize Pyrogram bot
+app = Client("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    user_data[message.chat.id] = {}  # Initialize user data
-    bot.send_message(message.chat.id, "Please enter the source channel username (e.g., @channel_name or https://t.me/channel_name):")
-    bot.register_next_step_handler(message, get_source_channel)
+async def forward_old_messages(source_channel, destination_channel):
+    """ Fetch and forward old messages from source to destination """
+    async with app:
+        async for message in app.get_chat_history(source_channel, limit=1000):  # Adjust limit as needed
+            try:
+                if message.text or message.caption or message.media:
+                    await app.forward_messages(destination_channel, source_channel, message.message_id)
+            except Exception as e:
+                print(f"⚠️ Error forwarding message {message.message_id}: {e}")
 
-def get_source_channel(message):
-    source_username = message.text.strip()
+async def main():
+    source_channel = "your_source_channel"  # Example: "@my_channel"
+    destination_channel = -100123456789  # Destination channel ID
 
-    # Extract username from link if needed
-    if "t.me/" in source_username:
-        source_username = "@" + source_username.split("/")[-1]
+    print("⏳ Forwarding messages. This may take some time...")
+    await forward_old_messages(source_channel, destination_channel)
+    print("✅ Forwarding completed!")
 
-    user_data[message.chat.id]['source_username'] = source_username
-
-    try:
-        source_channel = bot.get_chat(source_username)
-        user_data[message.chat.id]['source_id'] = source_channel.id
-        bot.send_message(message.chat.id, "Please enter the destination channel ID (e.g., -100123456789):")
-        bot.register_next_step_handler(message, get_destination_channel)
-
-    except telebot.apihelper.ApiException as e:
-        bot.reply_to(message, "⚠️ Source channel not found. Please enter a valid username.")
-        bot.register_next_step_handler(message, get_source_channel)
-
-def get_destination_channel(message):
-    try:
-        destination_channel_id = int(message.text.strip())
-        user_data[message.chat.id]['destination_id'] = destination_channel_id
-        bot.send_message(message.chat.id, "🔍 Checking admin permissions...")
-        check_admin(message)
-
-    except ValueError:
-        bot.reply_to(message, "⚠️ Invalid destination channel ID. Please enter a valid number.")
-        bot.register_next_step_handler(message, get_destination_channel)
-
-def check_admin(message):
-    try:
-        bot_user = bot.get_me()
-        admins = bot.get_chat_administrators(user_data[message.chat.id]['destination_id'])
-        is_admin = any(admin.user.id == bot_user.id for admin in admins)
-
-        if is_admin:
-            bot.send_message(message.chat.id, "✅ Bot has admin rights. It will now forward new messages automatically.")
-        else:
-            bot.send_message(message.chat.id, "❌ Bot is NOT an admin in the destination channel. Please grant admin permissions.")
-
-    except telebot.apihelper.ApiException as e:
-        bot.send_message(message.chat.id, f"⚠️ Error checking admin rights: {e}")
-
-@bot.channel_post_handler(func=lambda m: True)
-def forward_new_messages(message):
-    """ Forward only new messages when they arrive in the source channel """
-    for chat_id in user_data:
-        if 'source_id' in user_data[chat_id] and user_data[chat_id]['source_id'] == message.chat.id:
-            if 'destination_id' in user_data[chat_id]:
-                destination_id = user_data[chat_id]['destination_id']
-                bot.forward_message(destination_id, message.chat.id, message.message_id)
-
-def main():
-    print("🤖 Bot started...")
-    bot.infinity_polling()
-
-if __name__ == "__main__":
-    main()
+app.run(main())
